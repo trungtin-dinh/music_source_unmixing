@@ -1,0 +1,7 @@
+gradio>=5.50,<7
+demucs==4.0.1
+plotly>=5.0
+soundfile>=0.12
+torch==2.8.0
+torchaudio==2.8.0
+torchcodec==0.7.0
