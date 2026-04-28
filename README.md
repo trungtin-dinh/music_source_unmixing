@@ -1,6 +1,6 @@
 ---
 title: Music Source Unmixing
-emoji: 👀
+emoji: 💻
 colorFrom: yellow
 colorTo: pink
 sdk: gradio
