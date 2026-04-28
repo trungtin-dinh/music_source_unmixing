@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -14,6 +15,53 @@ import plotly.graph_objects as go
 import soundfile as sf
 import torch
 from plotly.subplots import make_subplots
+
+
+LATEX_DELIMITERS = [
+    {"left": "$$", "right": "$$", "display": True},
+    {"left": "$", "right": "$", "display": False},
+]
+
+with open("documentation_fr.md", "r", encoding="utf-8") as f:
+    DOCUMENTATION_fr = f.read()
+
+with open("documentation_en.md", "r", encoding="utf-8") as f:
+    DOCUMENTATION_en = f.read()
+
+
+def split_markdown_by_h2(markdown_text: str) -> dict[str, str]:
+    sections = {}
+    parts = re.split(r"(?m)^##\s+", markdown_text.strip())
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        lines = part.splitlines()
+        title = lines[0].strip()
+
+        if title.lower() in {"table des matières", "table of contents"}:
+            continue
+
+        sections[title] = "## " + part
+
+    return sections
+
+
+DOC_FR_SECTIONS = split_markdown_by_h2(DOCUMENTATION_fr)
+DOC_EN_SECTIONS = split_markdown_by_h2(DOCUMENTATION_en)
+
+DOC_FR_TITLES = list(DOC_FR_SECTIONS.keys())
+DOC_EN_TITLES = list(DOC_EN_SECTIONS.keys())
+
+
+def load_doc_fr_section(title: str) -> str:
+    return DOC_FR_SECTIONS[title]
+
+
+def load_doc_en_section(title: str) -> str:
+    return DOC_EN_SECTIONS[title]
 
 DEFAULT_AUDIO_URL = "https://raw.githubusercontent.com/pdx-cs-sound/wavs/main/collectathon.wav"
 
@@ -307,89 +355,133 @@ def remix_stems(
 
 with gr.Blocks(title="Music Source Unmixing") as demo:
     state = gr.State()
+    with gr.Tab("App"):    
 
-    with gr.Row():
-        audio_input = gr.Audio(
-            sources=["upload"],
-            type="filepath",
-            value=DEFAULT_AUDIO_URL,
-            label="Input audio",
-            scale=4,
-        )
-        model_name = gr.Dropdown(
-            choices=MODEL_CHOICES,
-            value="htdemucs_ft",
-            label="Model",
-            scale=1,
-        )
-        device_choice = gr.Dropdown(
-            choices=["auto", "cpu", "cuda"],
-            value="auto",
-            label="Device",
-            scale=1,
-        )
-        run_button = gr.Button("Separate", scale=1)
 
-    with gr.Row():
-        vocals_audio = gr.Audio(label="Vocals")
-        drums_audio = gr.Audio(label="Drums")
-        bass_audio = gr.Audio(label="Bass")
-        other_audio = gr.Audio(label="Other")
+        with gr.Row():
+            audio_input = gr.Audio(
+                sources=["upload"],
+                type="filepath",
+                value=DEFAULT_AUDIO_URL,
+                label="Input audio",
+                scale=4,
+            )
+            model_name = gr.Dropdown(
+                choices=MODEL_CHOICES,
+                value="htdemucs_ft",
+                label="Model",
+                scale=1,
+            )
+            device_choice = gr.Dropdown(
+                choices=["auto", "cpu", "cuda"],
+                value="auto",
+                label="Device",
+                scale=1,
+            )
+            run_button = gr.Button("Separate", scale=1)
 
-    analysis_plot = gr.Plot(label="Analysis")
+        with gr.Row():
+            vocals_audio = gr.Audio(label="Vocals")
+            drums_audio = gr.Audio(label="Drums")
+            bass_audio = gr.Audio(label="Bass")
+            other_audio = gr.Audio(label="Other")
 
-    with gr.Row():
-        vocals_gain = gr.Slider(
-            minimum=MIN_GAIN_DB,
-            maximum=MAX_GAIN_DB,
-            value=0.0,
-            step=GAIN_STEP_DB,
-            label="Vocals gain (dB)",
+        analysis_plot = gr.Plot(label="Analysis")
+
+        with gr.Row():
+            vocals_gain = gr.Slider(
+                minimum=MIN_GAIN_DB,
+                maximum=MAX_GAIN_DB,
+                value=0.0,
+                step=GAIN_STEP_DB,
+                label="Vocals gain (dB)",
+            )
+            drums_gain = gr.Slider(
+                minimum=MIN_GAIN_DB,
+                maximum=MAX_GAIN_DB,
+                value=0.0,
+                step=GAIN_STEP_DB,
+                label="Drums gain (dB)",
+            )
+            bass_gain = gr.Slider(
+                minimum=MIN_GAIN_DB,
+                maximum=MAX_GAIN_DB,
+                value=0.0,
+                step=GAIN_STEP_DB,
+                label="Bass gain (dB)",
+            )
+            other_gain = gr.Slider(
+                minimum=MIN_GAIN_DB,
+                maximum=MAX_GAIN_DB,
+                value=0.0,
+                step=GAIN_STEP_DB,
+                label="Other gain (dB)",
+            )
+
+        with gr.Row():
+            remix_button = gr.Button("Build remix", scale=1)
+            remix_audio = gr.Audio(label="Remix", scale=5)
+
+        run_button.click(
+            fn=separate_audio,
+            inputs=[audio_input, model_name, device_choice],
+            outputs=[
+                vocals_audio,
+                drums_audio,
+                bass_audio,
+                other_audio,
+                state,
+                analysis_plot,
+            ],
         )
-        drums_gain = gr.Slider(
-            minimum=MIN_GAIN_DB,
-            maximum=MAX_GAIN_DB,
-            value=0.0,
-            step=GAIN_STEP_DB,
-            label="Drums gain (dB)",
-        )
-        bass_gain = gr.Slider(
-            minimum=MIN_GAIN_DB,
-            maximum=MAX_GAIN_DB,
-            value=0.0,
-            step=GAIN_STEP_DB,
-            label="Bass gain (dB)",
-        )
-        other_gain = gr.Slider(
-            minimum=MIN_GAIN_DB,
-            maximum=MAX_GAIN_DB,
-            value=0.0,
-            step=GAIN_STEP_DB,
-            label="Other gain (dB)",
+
+        remix_button.click(
+            fn=remix_stems,
+            inputs=[state, vocals_gain, drums_gain, bass_gain, other_gain],
+            outputs=remix_audio,
         )
 
-    with gr.Row():
-        remix_button = gr.Button("Build remix", scale=1)
-        remix_audio = gr.Audio(label="Remix", scale=5)
+    with gr.Tab("Documentation FR"):
+        with gr.Row():
+            with gr.Column(scale=1):
+                doc_fr_buttons = []
+                for title in DOC_FR_TITLES:
+                    btn = gr.Button(title)
+                    doc_fr_buttons.append((btn, title))
 
-    run_button.click(
-        fn=separate_audio,
-        inputs=[audio_input, model_name, device_choice],
-        outputs=[
-            vocals_audio,
-            drums_audio,
-            bass_audio,
-            other_audio,
-            state,
-            analysis_plot,
-        ],
-    )
+            with gr.Column(scale=3):
+                doc_fr_view = gr.Markdown(
+                    value=load_doc_fr_section(DOC_FR_TITLES[0]),
+                    latex_delimiters=LATEX_DELIMITERS
+                )
 
-    remix_button.click(
-        fn=remix_stems,
-        inputs=[state, vocals_gain, drums_gain, bass_gain, other_gain],
-        outputs=remix_audio,
-    )
+        for btn, title in doc_fr_buttons:
+            btn.click(
+                lambda t=title: load_doc_fr_section(t),
+                inputs=None,
+                outputs=doc_fr_view,
+            )
+
+    with gr.Tab("Documentation EN"):
+        with gr.Row():
+            with gr.Column(scale=1):
+                doc_en_buttons = []
+                for title in DOC_EN_TITLES:
+                    btn = gr.Button(title)
+                    doc_en_buttons.append((btn, title))
+
+            with gr.Column(scale=3):
+                doc_en_view = gr.Markdown(
+                    value=load_doc_en_section(DOC_EN_TITLES[0]),
+                    latex_delimiters=LATEX_DELIMITERS
+                )
+
+        for btn, title in doc_en_buttons:
+            btn.click(
+                lambda t=title: load_doc_en_section(t),
+                inputs=None,
+                outputs=doc_en_view,
+            )
 
 demo.queue()
 demo.launch()
