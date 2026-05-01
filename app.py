@@ -63,6 +63,7 @@ def load_doc_fr_section(title: str) -> str:
 def load_doc_en_section(title: str) -> str:
     return DOC_EN_SECTIONS[title]
 
+
 DEFAULT_AUDIO_URL = "https://raw.githubusercontent.com/pdx-cs-sound/wavs/main/collectathon.wav"
 
 MODEL_CHOICES = [
@@ -141,7 +142,12 @@ def downsample_curve(x: np.ndarray, y: np.ndarray, max_points: int = 4000) -> tu
     return x[::step], y[::step]
 
 
-def compute_spectrogram(signal: np.ndarray, sample_rate: int, n_fft: int = 2048, hop_length: int = 512) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def compute_spectrogram(
+    signal: np.ndarray,
+    sample_rate: int,
+    n_fft: int = 2048,
+    hop_length: int = 512,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(signal) < n_fft:
         pad_width = n_fft - len(signal)
         signal = np.pad(signal, (0, pad_width), mode="constant")
@@ -172,20 +178,24 @@ def compute_frequency_spectrum(signal: np.ndarray, sample_rate: int) -> tuple[np
     magnitude = np.abs(np.fft.rfft(signal)) / max(1, len(signal))
     freqs = np.fft.rfftfreq(len(signal), d=1.0 / sample_rate)
 
-    freqs, magnitude = downsample_curve(freqs.astype(np.float32), magnitude.astype(np.float32), max_points=5000)
+    freqs, magnitude = downsample_curve(
+        freqs.astype(np.float32),
+        magnitude.astype(np.float32),
+        max_points=5000,
+    )
     return freqs, magnitude
 
 
 def build_analysis_figure(audio_paths: dict[str, str]) -> go.Figure:
     subplot_titles = [
-        "Vocals spectrogram",
-        "Drums spectrogram",
-        "Bass spectrogram",
-        "Other spectrogram",
-        "Vocals spectrum",
-        "Drums spectrum",
-        "Bass spectrum",
-        "Other spectrum",
+        "Vocals – spectrogram",
+        "Drums – spectrogram",
+        "Bass – spectrogram",
+        "Other – spectrogram",
+        "Vocals – magnitude spectrum",
+        "Drums – magnitude spectrum",
+        "Bass – magnitude spectrum",
+        "Other – magnitude spectrum",
     ]
 
     fig = make_subplots(
@@ -239,7 +249,7 @@ def separate_audio(
     model_name: str,
     device_choice: str,
     progress: gr.Progress = gr.Progress(),
-) -> tuple[str, str, str, str, dict[str, Any], go.Figure]:
+) -> tuple[str, str, str, str, str, dict[str, Any], go.Figure]:
     if not audio_path:
         raise gr.Error("Please upload an audio file.")
 
@@ -283,7 +293,7 @@ def separate_audio(
     if missing:
         raise gr.Error(f"Missing output stems: {', '.join(missing)}")
 
-    create_zip_file(list(stem_paths.values()), work_dir / "separated_stems.zip")
+    zip_path = create_zip_file(list(stem_paths.values()), work_dir / "separated_stems.zip")
 
     state = {
         "work_dir": str(work_dir),
@@ -307,6 +317,7 @@ def separate_audio(
         str(stem_paths["drums"]),
         str(stem_paths["bass"]),
         str(stem_paths["other"]),
+        str(zip_path),
         state,
         figure,
     )
@@ -353,11 +364,10 @@ def remix_stems(
     return str(remix_path)
 
 
-with gr.Blocks(title="Music Source Unmixing") as demo:
+with gr.Blocks(title="Music Source Separation") as demo:
     state = gr.State()
-    with gr.Tab("App"):    
 
-
+    with gr.Tab("App"):
         with gr.Row():
             audio_input = gr.Audio(
                 sources=["upload"],
@@ -373,12 +383,12 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
                 scale=1,
             )
             device_choice = gr.Dropdown(
-                choices=["auto", "cpu", "cuda"],
+                choices=["auto", "cpu"],
                 value="auto",
                 label="Device",
                 scale=1,
             )
-            run_button = gr.Button("Separate", scale=1)
+            run_button = gr.Button("Separate", variant="primary", scale=1)
 
         with gr.Row():
             vocals_audio = gr.Audio(label="Vocals")
@@ -386,7 +396,9 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
             bass_audio = gr.Audio(label="Bass")
             other_audio = gr.Audio(label="Other")
 
-        analysis_plot = gr.Plot(label="Analysis")
+        stems_zip = gr.File(label="Download stems (.zip)")
+
+        analysis_plot = gr.Plot(label="Stem Analysis")
 
         with gr.Row():
             vocals_gain = gr.Slider(
@@ -419,7 +431,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
             )
 
         with gr.Row():
-            remix_button = gr.Button("Build remix", scale=1)
+            remix_button = gr.Button("Build remix", variant="primary", scale=1)
             remix_audio = gr.Audio(label="Remix", scale=5)
 
         run_button.click(
@@ -430,6 +442,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
                 drums_audio,
                 bass_audio,
                 other_audio,
+                stems_zip,
                 state,
                 analysis_plot,
             ],
@@ -443,7 +456,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
 
     with gr.Tab("Documentation FR"):
         with gr.Row():
-            with gr.Column(scale=1):
+            with gr.Column(scale=0.5):
                 doc_fr_buttons = []
                 for title in DOC_FR_TITLES:
                     btn = gr.Button(title)
@@ -452,7 +465,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
             with gr.Column(scale=3):
                 doc_fr_view = gr.Markdown(
                     value=load_doc_fr_section(DOC_FR_TITLES[0]),
-                    latex_delimiters=LATEX_DELIMITERS
+                    latex_delimiters=LATEX_DELIMITERS,
                 )
 
         for btn, title in doc_fr_buttons:
@@ -464,7 +477,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
 
     with gr.Tab("Documentation EN"):
         with gr.Row():
-            with gr.Column(scale=1):
+            with gr.Column(scale=0.5):
                 doc_en_buttons = []
                 for title in DOC_EN_TITLES:
                     btn = gr.Button(title)
@@ -473,7 +486,7 @@ with gr.Blocks(title="Music Source Unmixing") as demo:
             with gr.Column(scale=3):
                 doc_en_view = gr.Markdown(
                     value=load_doc_en_section(DOC_EN_TITLES[0]),
-                    latex_delimiters=LATEX_DELIMITERS
+                    latex_delimiters=LATEX_DELIMITERS,
                 )
 
         for btn, title in doc_en_buttons:
