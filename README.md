@@ -1,20 +1,5 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/trungtin-dinh/music_source_unmixing)
 
----
-title: Music Source Unmixing
-emoji: 💻
-colorFrom: yellow
-colorTo: pink
-sdk: gradio
-sdk_version: 6.13.0
-app_file: app.py
-pinned: false
-license: mit
-short_description: Simple music source unmixing
----
-
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
-
 # Music Source Unmixing
 
 This repository contains an interactive music source unmixing mini app.
